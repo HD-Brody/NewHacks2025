@@ -44,3 +44,6 @@ def generate_itinerary_route():
     optimized = optimize_itinerary(itinerary)
 
     return jsonify({'destination': destination, 'month': month, 'itinerary': optimized})
+
+if __name__ == '__main__':
+    print(generate_itinerary_route)
