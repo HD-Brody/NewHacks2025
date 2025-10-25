@@ -70,6 +70,43 @@ def get_location_coordinates(places, location, country):
 
     return coords
 
+def find_path_and_time(start_coords, end_coords, start_time):
+    """Return a path and the time it takes given the start and end coordinates
+
+    Args:
+        start_coords (dict): {'lat': float, 'lng': float}
+        end_coords (dict): {'lat': float, 'lng': float}
+
+    Returns:
+
+
+    """
+
+    # Load environment variables from .env file
+
+    # Dynamically determine the path to the .env file
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    dotenv_path = os.path.join(base_dir, ".env")
+
+    load_dotenv(dotenv_path=dotenv_path)
+    api_key = os.getenv("TRIPGO_API_KEY")
+    
+    url = "https://api.tripgo.com/v1/routing.json"
+
+    params = {
+            
+        }
+    headers = {
+        "Accept": "application/json", 
+        "X-TripGo-Key": api_key
+
+    
+    }
+
+
+
+
+
 if __name__ == "__main__":  
     print(os.getenv("ORS_API_KEY"))
     print(get_location_coordinates(["The Louvre", "Musee d'Orsay", "Arc de Triomphe"], "Paris", "FR"))
