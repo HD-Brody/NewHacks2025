@@ -4,12 +4,46 @@ export default function LandingPage({ initial = {}, onCreate }){
   const [location, setLocation] = useState(initial.location || '')
   const [month, setMonth] = useState(initial.month || '')
   const [budget, setBudget] = useState(initial.budget || '')
-  const [activityType, setActivityType] = useState(initial.activityType || '')
+  // activities: array of singular activity words. activityInput holds the current typed word.
+  const [activities, setActivities] = useState(
+    initial.activities && Array.isArray(initial.activities)
+      ? initial.activities
+      : (initial.activityType ? initial.activityType.split(',').map(s=>s.trim()).filter(Boolean) : [])
+  )
+  const [activityInput, setActivityInput] = useState('')
 
   const handleSubmit = (e) => {
     e && e.preventDefault()
-    const payload = { location, month, budget, activityType }
+    // keep backward compatibility by providing activityType as a comma-joined string
+    const payload = { location, month, budget, activityType: activities.join(','), activities }
     onCreate && onCreate(payload)
+  }
+
+  const addActivity = (word) => {
+    const clean = (word || '').trim()
+    if (!clean) return
+    // only allow single words (no spaces)
+    if (clean.split(/\s+/).length > 1) return
+    // prevent duplicates
+    if (activities.includes(clean)) return
+    setActivities(prev => [...prev, clean])
+  }
+
+  const removeActivity = (idx) => {
+    setActivities(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  const handleActivityKeyDown = (e) => {
+    if (e.key === 'Enter'){
+      e.preventDefault()
+      if (!activityInput) return
+      addActivity(activityInput)
+      setActivityInput('')
+    }
+    if (e.key === 'Backspace' && !activityInput && activities.length){
+      // remove last activity on backspace when input empty
+      removeActivity(activities.length - 1)
+    }
   }
 
   return (
@@ -46,8 +80,8 @@ export default function LandingPage({ initial = {}, onCreate }){
       </div>
 
       <div className="w-full max-w-2xl">
-        <div className="relative text-center">
-          <h1 className="text-7xl font-extrabold mb-4 py-4 text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-pink-500">Perfect Day</h1>
+        <div className="relative bg-white/95 p-6 md:p-8 rounded-2xl shadow-2xl text-left backdrop-blur-sm">
+          <h1 className="text-7xl font-extrabold mb-4 py-4 text-center text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-pink-500">Perfect Day</h1>
           <form onSubmit={handleSubmit} className="space-y-4 text-left">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
 
@@ -95,11 +129,34 @@ export default function LandingPage({ initial = {}, onCreate }){
                 </div>
               </label>
 
-              <label className="block">
-                <span className="text-sm font-medium text-slate-700">Activity type</span>
-                <input value={activityType} onChange={e=>setActivityType(e.target.value)} className="mt-1 block w-full p-3 border border-transparent rounded-lg shadow-sm" placeholder="e.g. snorkeling, hiking" />
-              </label>
+            </div>
 
+            {/* Activities row: full width below the grid */}
+            <div>
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">Activities</span>
+                <div className="mt-2 p-2 bg-white rounded-lg border border-transparent shadow-sm">
+                  <div className="flex flex-col flex-wrap">
+
+                    <input
+                      value={activityInput}
+                      onChange={e=>setActivityInput(e.target.value)}
+                      onKeyDown={handleActivityKeyDown}
+                      className="flex-1 min-w-0 p-2 bg-transparent outline-none text-sm"
+                      placeholder="Type a word and press Enter"
+                    />
+                    <div className='mt-1 gap-1 flex flex-wrap'>
+                        {activities.map((a, idx) => (
+                        <span key={a + idx} className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-100 text-sm">
+                            <span className="capitalize">{a}</span>
+                            <button type="button" onClick={()=>removeActivity(idx)} className="text-amber-600 hover:text-amber-800 text-xs font-bold">×</button>
+                        </span>
+                        ))}  
+                    </div>
+                    
+                  </div>
+                </div>
+              </label>
             </div>
 
             <div className="text-center pt-4">
