@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_URL = "https://api.gemini.ai/v1/generate"
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
 def generate_itinerary(destination: str, month: str, budget: str, category: str) -> list[dict]:
     """Return a sample itinerary list for the given destination.
 
