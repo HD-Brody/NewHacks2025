@@ -15,6 +15,7 @@ Backend (Python)
 - See `backend/requirements.txt` — this project depends on:
 	- Flask >= 2.0
 	- python-dotenv
+	- Flask-Cors (optional, used here for development to allow requests from the frontend dev server)
 
 Frontend (Node)
 - See `frontend/package.json` — notable dependencies included:
