@@ -20,7 +20,7 @@ function FitBounds({ bounds }) {
   return null
 }
 
-export default function MapView({ itinerary }) {
+export default function MapView({ itinerary, initialCenter = [41.886954, 12.501652], initialZoom = 13 }) {
   // itinerary expected to be an array of items with { place, coordinates: { lat, lng } }
   const points = (itinerary || []).map(i => ({ place: i.place, coords: i.coordinates }))
 
@@ -30,20 +30,19 @@ export default function MapView({ itinerary }) {
     .filter(p => p.coords && p.coords.lat != null && p.coords.lng != null)
     .map(p => [p.coords.lat, p.coords.lng])
 
-  const center = useMemo(() => bounds[0] || [0, 0], [bounds])
+  const center = useMemo(() => (bounds && bounds.length ? bounds[0] : initialCenter), [bounds, initialCenter])
 
   return (
-    <div className="p-2 border rounded">
-      <div className="font-semibold mb-2">Map</div>
+    <div className="h-full w-full">
       <MapContainer
         center={center}
-        zoom={13}
+        zoom={initialZoom}
         scrollWheelZoom={true}
-        style={{ height: 320, width: '100%' }}
+        style={{ height: '100%', width: '100%' }}
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='&copy; <a href="https://carto.com/">CARTO</a> contributors'
+          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
         />
 
         {points.map((p, idx) => (

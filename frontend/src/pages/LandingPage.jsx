@@ -81,7 +81,7 @@ export default function LandingPage({ initial = {}, onCreate }){
 
       <div className="w-full max-w-2xl">
         <div className="relative bg-white/95 p-6 md:p-8 rounded-2xl shadow-2xl text-left backdrop-blur-sm">
-          <h1 className="text-7xl font-extrabold mb-4 py-4 text-center text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-pink-500">Perfect Day</h1>
+          <h1 className="text-7xl font-extrabold mb-4 py-4 text-center text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-pink-500">Daycation</h1>
           <form onSubmit={handleSubmit} className="space-y-4 text-left">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
 
