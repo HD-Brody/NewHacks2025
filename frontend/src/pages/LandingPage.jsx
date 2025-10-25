@@ -49,7 +49,7 @@ export default function LandingPage({ initial = {}, onCreate }){
         <div className="relative text-center">
           <h1 className="text-7xl font-extrabold mb-4 py-4 text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-pink-500">Perfect Day</h1>
           <form onSubmit={handleSubmit} className="space-y-4 text-left">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
 
               <label className="block">
                 <span className="text-sm font-medium text-slate-700">Location</span>
@@ -58,12 +58,41 @@ export default function LandingPage({ initial = {}, onCreate }){
 
               <label className="block">
                 <span className="text-sm font-medium text-slate-700">Month</span>
-                <input value={month} onChange={e=>setMonth(e.target.value)} className="mt-1 block w-full p-3 border border-transparent rounded-lg shadow-sm" placeholder="e.g. December" />
+                <select value={month} onChange={e=>setMonth(e.target.value)} className="mt-1 block w-full p-3 border border-transparent rounded-lg shadow-sm bg-white">
+                  <option value="">Select month</option>
+                  <option value="January">January</option>
+                  <option value="February">February</option>
+                  <option value="March">March</option>
+                  <option value="April">April</option>
+                  <option value="May">May</option>
+                  <option value="June">June</option>
+                  <option value="July">July</option>
+                  <option value="August">August</option>
+                  <option value="September">September</option>
+                  <option value="October">October</option>
+                  <option value="November">November</option>
+                  <option value="December">December</option>
+                </select>
               </label>
 
               <label className="block">
                 <span className="text-sm font-medium text-slate-700">Budget</span>
-                <input value={budget} onChange={e=>setBudget(e.target.value)} className="mt-1 block w-full p-3 border border-transparent rounded-lg shadow-sm" placeholder="e.g. 2000" />
+                <div className="mt-2 flex gap-2 flex-wrap">
+                  <label className={`flex-1 min-w-0 text-center p-2 rounded-lg border ${budget === '$' ? 'bg-amber-200 border-amber-400' : 'bg-white border-transparent'} cursor-pointer`}>
+                    <input type="radio" name="budget" value="$" checked={budget === '$'} onChange={e=>setBudget(e.target.value)} className="sr-only" />
+                    <span className="font-semibold">$</span>
+                  </label>
+
+                  <label className={`flex-1 min-w-0 text-center p-2 rounded-lg border ${budget === '$$' ? 'bg-amber-200 border-amber-400' : 'bg-white border-transparent'} cursor-pointer`}>
+                    <input type="radio" name="budget" value="$$" checked={budget === '$$'} onChange={e=>setBudget(e.target.value)} className="sr-only" />
+                    <span className="font-semibold">$$</span>
+                  </label>
+
+                  <label className={`flex-1 min-w-0 text-center p-2 rounded-lg border ${budget === '$$$' ? 'bg-amber-200 border-amber-400' : 'bg-white border-transparent'} cursor-pointer`}>
+                    <input type="radio" name="budget" value="$$$" checked={budget === '$$$'} onChange={e=>setBudget(e.target.value)} className="sr-only" />
+                    <span className="font-semibold">$$$</span>
+                  </label>
+                </div>
               </label>
 
               <label className="block">
