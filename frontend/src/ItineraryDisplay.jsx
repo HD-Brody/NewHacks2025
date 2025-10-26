@@ -13,8 +13,22 @@ export default function ItineraryDisplay({ itinerary }){
     <div>
       <ol className="list-decimal space-y-3 pl-6">
         {itinerary.map((item, idx) => {
-          const time = item.start_time || item.time || `${item.start || ''}${item.end ? ' - ' + item.end : ''}`
-          const title = item.title || item.place || 'Untitled activity'
+          // Normalize and format time values coming from different generators
+          let time = ''
+          if (Array.isArray(item.time) && item.time.length === 2) {
+            time = `${item.time[0]} - ${item.time[1]}`
+          } else if (typeof item.time === 'string' && item.time.trim()) {
+            time = item.time
+          } else if (item.start_time || item.end_time) {
+            const s = item.start_time || item.start || ''
+            const e = item.end_time || item.end || ''
+            time = s && e ? `${s} - ${e}` : (s || e || '')
+          } else if (item.start || item.end) {
+            time = item.start && item.end ? `${item.start} - ${item.end}` : (item.start || item.end || '')
+          }
+
+          // Title may be under several keys depending on generator output
+          const title = item.title || item.place || item.name || 'Untitled activity'
           const category = item.category || item.type || 'General'
           const price = fmtPrice(item.price || item.cost)
           const description = item.description || item.notes || ''

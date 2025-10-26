@@ -15,10 +15,10 @@ def generate_itinerary(destination: str, month: str, budget: str, category: str)
     # Use single quotes for the internal keys to simplify the outer string escaping
     format_template = (
         '{"Places": {'
-        '"place1": { "time": [10:30, 11:30], "category": "food", "price": "$", "description": "short, clear description" }, '
-        '"place2": { "time": [11:30, 12:00], "category": "store", "price": "$", "description": "short, clear description" }, '
-        '"place3": { "time": [12:15, 13:00], "category": "museum", "price": "$", "description": "short, clear description" }, '
-        '"place4": { "time": [13:15, 14:00], "category": "outdoor", "price": "$", "description": "short, clear description" } } }'
+        '"name_of_place1": { "time": [10:30, 11:30], "category": "food", "price": "$", "description": "short, clear description" }, '
+        '"name_of_place2": { "time": [11:30, 12:00], "category": "store", "price": "$", "description": "short, clear description" }, '
+        '"name_of_place3": { "time": [12:15, 13:00], "category": "museum", "price": "$", "description": "short, clear description" }, '
+        '"name_of_place4": { "time": [13:15, 14:00], "category": "outdoor", "price": "$", "description": "short, clear description" } } }'
     )
 
     prompt = (
