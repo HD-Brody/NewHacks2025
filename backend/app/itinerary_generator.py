@@ -26,16 +26,28 @@ def generate_itinerary(destination: str, month: str, budget: str, category: str)
         You must only respond with a JSON object that gives a daily itinerary for a trip to {destination},
         based around a given {category} activity with a **{budget}** price point, formatted exactly as follows: {format_template}.
 
-        Each "place" in the itinerary must meet ALL of the following conditions:
-        - It must refer to the exact and official name of a real, mappable location or business (such as those findable on Google Maps or OpenStreetMap).
-        - It must be open and accessible in {month}.
-        - It must be within a reasonable travel distance for a single day trip.
-        - Prices must be $, $$, or $$$.
-        - Every listed time must be formatted as a string in "HH:MM" format (e.g., "10:15").
-        - Descriptions must be short, clear, and to the point.
-        - Output only JSON — no text outside the JSON object.
+        Each "place" in the itinerary must meet ALL of the following **strict** requirements:
 
-        If there are multiple branches or similar names, always use the main or most well-known location name (for example, "Tokyo Sushi Academy" instead of "Tokyo Sushi Academy Tsukiji").
+        1. The "name" field must contain the official, mappable name of the business, attraction, or landmark exactly as it appears in OpenStreetMap or Google Maps (the primary listing name).
+        2. If the primary listing name by itself is ambiguous or would likely return multiple geocoding results, append the **minimal disambiguator** in parentheses directly after the name. The minimal disambiguator should be, in order of preference:
+        a) full street address in the format "Street number Street name, City, Country"  
+        b) otherwise "City, Country"  
+        c) otherwise the well-known neighborhood only if essential for disambiguation.
+        Example:  
+            - `Trattoria Da Enzo`  (if unambiguous)  
+            - `Trattoria Da Enzo (Via dei Vascellari 29, Rome, Italy)`  (if needed to disambiguate)  
+            - `Tokyo Sushi Academy (Tsukiji, Tokyo, Japan)`  (only if address not available)
+        3. **Do not** invent marketing suffixes or branch labels that are not part of the map listing (avoid "al 29", "Tsukiji" appended to the brand unless that exact phrase appears in the map entry).
+        4. Use the map's canonical capitalization, punctuation, and diacritics when possible (e.g., "Café" not "Cafe")—but do not add extra words.
+        5. If the official listing includes a suite/branch name as part of the map entry, include it exactly; otherwise omit branch or neighborhood tokens.
+        6. Each place must be open and accessible in {month}.
+        7. Each place must be within a reasonable travel distance so the full day’s itinerary is visitable in one day.
+        8. Prices must be $, $$, or $$$.
+        9. Time values must be strings in 24-hour format `"HH:MM"` (for example, `"10:15"`).
+        10. Descriptions must be short, clear, and to the point.
+        11. Output only valid JSON exactly matching the provided structure — no extra text, no commentary.
+
+        If you cannot find a single unambiguous map name for a place that fits the activity, prefer a different place rather than inventing or guessing a name.
         """
     )
 

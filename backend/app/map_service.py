@@ -5,7 +5,11 @@ Provides function to convert place names into latitude/longitude pairs.
 import os
 from dotenv import load_dotenv
 import requests
-import openrouteservice
+try:
+    import openrouteservice
+except Exception:
+    openrouteservice = None
+    print('Warning: optional dependency "openrouteservice" not installed; route decoding will be limited.')
 import time
 
 def nominatim_lookup(place, city=None):
@@ -86,7 +90,8 @@ def get_location_coordinates(places, location, country):
 
         # Now geocode the place itself
         try:
-            params_place = {"api_key": api_key, "text": place}
+            # include the location in the query text to bias results to the destination
+            params_place = {"api_key": api_key, "text": f"{place}, {location}" if location else place}
             if country:
                 params_place["boundary.country"] = country
             if city_lat is not None and city_lon is not None:
@@ -98,12 +103,34 @@ def get_location_coordinates(places, location, country):
             data = resp.json() or {}
             features = data.get('features') or []
             if features:
-                coords_list = features[0].get('geometry', {}).get('coordinates') or []
-                if len(coords_list) >= 2:
-                    place_lon, place_lat = coords_list[0], coords_list[1]
-                    coords[place] = {'lat': place_lat, 'lng': place_lon}
+                # If we have a city focus, pick the feature closest to the city center.
+                if city_lat is not None and city_lon is not None:
+                    best = None
+                    best_dist = None
+                    for f in features:
+                        coords_list = f.get('geometry', {}).get('coordinates') or []
+                        if len(coords_list) < 2:
+                            continue
+                        lon, lat = coords_list[0], coords_list[1]
+                        try:
+                            dist_km = haversine_km(city_lat, city_lon, float(lat), float(lon))
+                        except Exception:
+                            dist_km = None
+                        if best is None or (dist_km is not None and (best_dist is None or dist_km < best_dist)):
+                            best = (lon, lat)
+                            best_dist = dist_km
+                    if best is not None:
+                        place_lon, place_lat = best[0], best[1]
+                        coords[place] = {'lat': place_lat, 'lng': place_lon}
+                    else:
+                        coords[place] = None
                 else:
-                    coords[place] = None
+                    coords_list = features[0].get('geometry', {}).get('coordinates') or []
+                    if len(coords_list) >= 2:
+                        place_lon, place_lat = coords_list[0], coords_list[1]
+                        coords[place] = {'lat': place_lat, 'lng': place_lon}
+                    else:
+                        coords[place] = None
             else:
                 coords[place] = None
         except Exception as e:
@@ -137,7 +164,8 @@ def get_location_coordinates(places, location, country):
         if too_far:
             # retry ORS with appended location text
             try:
-                params_retry = {"api_key": api_key, "text": f"{place}, {location}"}
+                # also include location in retry text (if not already present)
+                params_retry = {"api_key": api_key, "text": f"{place}, {location}" if location else place}
                 if country:
                     params_retry["boundary.country"] = country
                 if city_lat is not None and city_lon is not None:
@@ -148,18 +176,39 @@ def get_location_coordinates(places, location, country):
                 data = resp.json() or {}
                 features = data.get('features') or []
                 if features:
-                    coords_list = features[0].get('geometry', {}).get('coordinates') or []
-                    if len(coords_list) >= 2:
-                        place_lon, place_lat = coords_list[0], coords_list[1]
-                        coords[place] = {'lat': place_lat, 'lng': place_lon}
-                        # re-check distance
-                        try:
-                            dist_km = haversine_km(city_lat, city_lon, float(place_lat), float(place_lon))
-                            if dist_km > 200:
-                                # still far — treat as no result
-                                coords[place] = None
-                        except Exception:
-                            pass
+                    # pick the feature closest to the city focus if available
+                    if city_lat is not None and city_lon is not None:
+                        best = None
+                        best_dist = None
+                        for f in features:
+                            coords_list = f.get('geometry', {}).get('coordinates') or []
+                            if len(coords_list) < 2:
+                                continue
+                            lon, lat = coords_list[0], coords_list[1]
+                            try:
+                                dist_km = haversine_km(city_lat, city_lon, float(lat), float(lon))
+                            except Exception:
+                                dist_km = None
+                            if best is None or (dist_km is not None and (best_dist is None or dist_km < best_dist)):
+                                best = (lon, lat)
+                                best_dist = dist_km
+                        if best is not None:
+                            place_lon, place_lat = best[0], best[1]
+                            coords[place] = {'lat': place_lat, 'lng': place_lon}
+                            try:
+                                if best_dist is not None and best_dist > 200:
+                                    coords[place] = None
+                            except Exception:
+                                pass
+                        else:
+                            coords[place] = None
+                    else:
+                        coords_list = features[0].get('geometry', {}).get('coordinates') or []
+                        if len(coords_list) >= 2:
+                            place_lon, place_lat = coords_list[0], coords_list[1]
+                            coords[place] = {'lat': place_lat, 'lng': place_lon}
+                        else:
+                            coords[place] = None
                 else:
                     coords[place] = None
             except Exception as e:
@@ -226,24 +275,37 @@ def find_path_and_time(start_coords, end_coords, start_time):
     response_car.raise_for_status()  # Raise if status code != 200
     data_car = response_car.json()
 
-    if data_walk['routes']:
-        time_walk = data_walk['routes'][0]['summary']['duration']
-        distance_walk = data_walk['routes'][0]['summary']['distance']
-        polyline_walk = data_walk['routes'][0]['geometry']
-        client_walk = openrouteservice.Client(key=api_key)
-        decoded_walk = openrouteservice.convert.decode_polyline(polyline_walk)
-        polyline_decoded_walk = decoded_walk['coordinates']
-        polyline_decodedl_walk = [[lat, lon] for lon, lat in polyline_decoded_walk]
+    # Defaults in case routes are missing
+    time_walk = time_car = None
+    distance_walk = distance_car = None
+    polyline_decodedl_walk = polyline_decodedl_car = None
 
+    if data_walk.get('routes'):
+        time_walk = data_walk['routes'][0]['summary'].get('duration')
+        distance_walk = data_walk['routes'][0]['summary'].get('distance')
+        polyline_walk = data_walk['routes'][0].get('geometry')
+        # decode polyline only if openrouteservice is available
+        if openrouteservice and polyline_walk:
+            try:
+                decoded_walk = openrouteservice.convert.decode_polyline(polyline_walk)
+                polyline_decoded_walk = decoded_walk.get('coordinates')
+                if polyline_decoded_walk:
+                    polyline_decodedl_walk = [[lat, lon] for lon, lat in polyline_decoded_walk]
+            except Exception:
+                polyline_decodedl_walk = None
 
-    if data_car['routes']:
-        time_car = data_car['routes'][0]['summary']['duration']
-        distance_car = data_car['routes'][0]['summary']['distance']
-        polyline_car = data_car['routes'][0]['geometry']
-        client_car = openrouteservice.Client(key=api_key)
-        decoded_car = openrouteservice.convert.decode_polyline(polyline_car)
-        polyline_decoded_car = decoded_car['coordinates']
-        polyline_decodedl_car = [[lat, lon] for lon, lat in polyline_decoded_car]
+    if data_car.get('routes'):
+        time_car = data_car['routes'][0]['summary'].get('duration')
+        distance_car = data_car['routes'][0]['summary'].get('distance')
+        polyline_car = data_car['routes'][0].get('geometry')
+        if openrouteservice and polyline_car:
+            try:
+                decoded_car = openrouteservice.convert.decode_polyline(polyline_car)
+                polyline_decoded_car = decoded_car.get('coordinates')
+                if polyline_decoded_car:
+                    polyline_decodedl_car = [[lat, lon] for lon, lat in polyline_decoded_car]
+            except Exception:
+                polyline_decodedl_car = None
 
     return time_walk, time_car, distance_walk, distance_car, polyline_decodedl_walk, polyline_decodedl_car
 

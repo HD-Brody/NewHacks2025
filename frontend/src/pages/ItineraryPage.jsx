@@ -5,6 +5,7 @@ import { fetchGeocode } from '../api'
 
 export default function ItineraryPage({ formData = {}, itinerary = [], onBack, setItinerary }){
   const [isRetrying, setIsRetrying] = useState(false)
+  const [destCoords, setDestCoords] = useState(null)
 
   const normalize = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[-\uFFFF]/g, '').replace(/[^a-z0-9]+/g, '')
   useEffect(() => {
@@ -17,20 +18,41 @@ export default function ItineraryPage({ formData = {}, itinerary = [], onBack, s
     // Fetch geocode data when the component mounts
     const fetchGeocodeData = async () => {
       try {
-        const places = itinerary.map(item => item.title || item.place).filter(Boolean)
+        // append destination to each query (helps disambiguate common names)
+        const places = itinerary.map(item => {
+          const base = item.title || item.place
+          if (!base) return null
+          return formData.location ? `${base}, ${formData.location}` : base
+        }).filter(Boolean)
         console.log('ItineraryPage: requesting geocode for', places)
         const coordsMap = await fetchGeocode({ places, location: formData.location, country: formData.country })
         console.log('ItineraryPage: coordsMap', coordsMap)
 
+        // also fetch coordinates for the destination itself so the map can center on it
+        if (formData.location) {
+          try {
+            const destMap = await fetchGeocode({ places: [formData.location], location: formData.location, country: formData.country })
+            const destKey = normalize(formData.location)
+            const destFound = (destMap && (destMap[formData.location] || destMap[formData.location + `, ${formData.location}`])) || destMap[Object.keys(destMap || {})[0]]
+            if (destFound && destFound.lat != null && destFound.lng != null) {
+              setDestCoords({ lat: Number(destFound.lat), lng: Number(destFound.lng) })
+            }
+          } catch (e) {
+            console.warn('Failed to geocode destination:', e)
+          }
+        }
+
         if (cancelled) return
 
-        // normalize keys from backend and merge into items safely
+        // normalize keys from backend and merge into items safely. Backend keys may include the appended destination
         const coordsMapNormalized = {}
         Object.entries(coordsMap || {}).forEach(([k, v]) => { coordsMapNormalized[normalize(k)] = v })
 
         setItinerary(prev => prev.map(item => {
-          const key = normalize(item.title || item.place || '')
-          const found = coordsMapNormalized[key]
+          const base = item.title || item.place || ''
+          const key = normalize(base)
+          const keyWithLoc = formData.location ? normalize(`${base}, ${formData.location}`) : key
+          const found = coordsMapNormalized[keyWithLoc] || coordsMapNormalized[key]
           const coords = found && found.lat != null && found.lng != null
             ? { lat: Number(found.lat), lng: Number(found.lng) }
             : item.coordinates || null
@@ -47,21 +69,26 @@ export default function ItineraryPage({ formData = {}, itinerary = [], onBack, s
 
   // retry geocoding only for missing items
   const retryMissing = async () => {
-    const missing = (itinerary || []).filter(i => !i.coordinates).map(i => i.title || i.place).filter(Boolean)
+    const missing = (itinerary || []).filter(i => !i.coordinates).map(i => {
+      const base = i.title || i.place
+      if (!base) return null
+      return formData.location ? `${base}, ${formData.location}` : base
+    }).filter(Boolean)
     if (!missing.length) return
     setIsRetrying(true)
     try {
       console.log('Retrying geocode for missing:', missing)
       const coordsMap = await fetchGeocode({ places: missing, location: formData.location, country: formData.country })
       console.log('Retry coordsMap:', coordsMap)
-
       const coordsMapNormalized = {}
       Object.entries(coordsMap || {}).forEach(([k, v]) => { coordsMapNormalized[normalize(k)] = v })
 
       setItinerary(prev => prev.map(item => {
-        const key = normalize(item.title || item.place || '')
+        const base = item.title || item.place || ''
+        const key = normalize(base)
+        const keyWithLoc = formData.location ? normalize(`${base}, ${formData.location}`) : key
         if (item.coordinates) return item
-        const found = coordsMapNormalized[key]
+        const found = coordsMapNormalized[keyWithLoc] || coordsMapNormalized[key]
         const coords = found && found.lat != null && found.lng != null
           ? { lat: Number(found.lat), lng: Number(found.lng) }
           : null
@@ -119,7 +146,7 @@ export default function ItineraryPage({ formData = {}, itinerary = [], onBack, s
 
         <div className="w-1/2 overflow-auto border-l border-sky-100 min-h-0">
           <div className="h-full min-h-0">
-            <MapView itinerary={itinerary} />
+                <MapView itinerary={itinerary} initialCenter={destCoords ? [destCoords.lat, destCoords.lng] : undefined} />
           </div>
         </div>
       </div>
