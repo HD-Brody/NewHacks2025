@@ -5,6 +5,7 @@ Provides function to convert place names into latitude/longitude pairs.
 import os
 from dotenv import load_dotenv
 import requests
+import openrouteservice
 import time
 
 
@@ -38,7 +39,6 @@ def get_location_coordinates(places, location, country):
 
     Returns:
         dict: mapping place -> a dictionaryof dictionaries {location: "The Louvre", coordinates: {'lat': float, 'lng': float}}
-
     Todo:
         - Integrate with a real geocoding API (Open Route Service API)
         - Cache results
@@ -193,10 +193,9 @@ def find_path_and_time(start_coords, end_coords, start_time):
     Args:
         start_coords (dict): {'lat': float, 'lng': float}
         end_coords (dict): {'lat': float, 'lng': float}
+        start_time: time after 1970 in seconds
 
     Returns:
-
-
     """
 
     # Load environment variables from .env file
@@ -206,24 +205,54 @@ def find_path_and_time(start_coords, end_coords, start_time):
     dotenv_path = os.path.join(base_dir, ".env")
 
     load_dotenv(dotenv_path=dotenv_path)
-    api_key = os.getenv("TRIPGO_API_KEY")
+    api_key = os.getenv("ORS_API_KEY")
     
-    url = "https://api.tripgo.com/v1/routing.json"
+    url_walk = "https://api.openrouteservice.org/v2/directions/foot-walking/json"
+    url_car = "https://api.openrouteservice.org/v2/directions/driving-car/json"
 
-    params = {
-            
-        }
+    body = {
+        "coordinates": [[start_coords['lng'], start_coords['lat']], [end_coords['lng'], end_coords['lat']]],
+    }
     headers = {
-        "Accept": "application/json", 
-        "X-TripGo-Key": api_key
-
-    
+        'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8',
+    'Authorization': api_key,
+    'Content-Type': 'application/json; charset=utf-8'
     }
 
+    response_walk = requests.post(url_walk, json=body, headers=headers)
+    response_walk.raise_for_status()  # Raise if status code != 200
+    data_walk = response_walk.json()
+
+    response_car = requests.post(url_car, json=body, headers=headers)
+    response_car.raise_for_status()  # Raise if status code != 200
+    data_car = response_car.json()
+
+    if data_walk['routes']:
+        time_walk = data_walk['routes'][0]['summary']['duration']
+        distance_walk = data_walk['routes'][0]['summary']['distance']
+        polyline_walk = data_walk['routes'][0]['geometry']
+        client_walk = openrouteservice.Client(key=api_key)
+        decoded_walk = openrouteservice.convert.decode_polyline(polyline_walk)
+        polyline_decoded_walk = decoded_walk['coordinates']
+        polyline_decodedl_walk = [[lat, lon] for lon, lat in polyline_decoded_walk]
 
 
+    if data_car['routes']:
+        time_car = data_car['routes'][0]['summary']['duration']
+        distance_car = data_car['routes'][0]['summary']['distance']
+        polyline_car = data_car['routes'][0]['geometry']
+        client_car = openrouteservice.Client(key=api_key)
+        decoded_car = openrouteservice.convert.decode_polyline(polyline_car)
+        polyline_decoded_car = decoded_car['coordinates']
+        polyline_decodedl_car = [[lat, lon] for lon, lat in polyline_decoded_car]
 
+    return time_walk, time_car, distance_walk, distance_car, polyline_decodedl_walk, polyline_decodedl_car
 
 if __name__ == "__main__":  
     print(os.getenv("ORS_API_KEY"))
     print(get_location_coordinates(["The Louvre", "Musee d'Orsay", "Arc de Triomphe"], "Paris", "FR"))
+
+    # the louvre
+    # arc de triomphe
+    print(find_path_and_time({'lng': 2.3364, 'lat': 48.8606}, {'lng': 2.295, 'lat': 48.8738}, 1761433377))
+    
