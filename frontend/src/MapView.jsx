@@ -20,7 +20,7 @@ function FitBounds({ bounds }) {
   return null
 }
 
-export default function MapView({ itinerary = [], initialCenter = [35.68, 139.76], initialZoom = 13 }) {
+export default function MapView({ itinerary = [], initialCenter = [35.68, 139.76], initialZoom = 11 }) {
   // itinerary expected to be an array of items with { title, coordinates: { lat, lng } }
   const points = useMemo(() => (
     (itinerary || [])
