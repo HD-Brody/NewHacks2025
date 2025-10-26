@@ -1,7 +1,8 @@
-import React, { useMemo, useEffect } from 'react'
+import React, { useMemo, useEffect, useState } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { fetchPolylines } from './api'
 
 // Fix default icon URLs for Vite bundler (ensures marker images load)
 delete L.Icon.Default.prototype._getIconUrl
@@ -36,7 +37,38 @@ export default function MapView({ itinerary = [], initialCenter = [35.68, 139.76
 
   const bounds = points.map(p => [p.lat, p.lng])
   const center = points.length ? [points[0].lat, points[0].lng] : initialCenter
-  const path = points.length > 1 ? points.map(p => [p.lat, p.lng]) : []
+  const [polylines, setPolylines] = useState([])
+
+  // Fetch polylines for consecutive itinerary points
+  useEffect(() => {
+    let cancelled = false
+    // build simple itinerary payload with coordinates only
+    const payloadItin = (itinerary || []).map(item => ({ coordinates: item && item.coordinates ? { lat: Number(item.coordinates.lat), lng: Number(item.coordinates.lng) } : null }))
+    const validCount = payloadItin.filter(i => i && i.coordinates && i.coordinates.lat != null && i.coordinates.lng != null).length
+    if (validCount < 2) {
+      setPolylines([])
+      return
+    }
+
+    const fetchRoutes = async () => {
+      try {
+        const res = await fetchPolylines({ itinerary: payloadItin })
+        if (cancelled) return
+        // pick walk polyline if available, else car
+        const lines = (res || []).map(seg => {
+          const poly = seg.walk && seg.walk.polyline ? seg.walk.polyline : (seg.car && seg.car.polyline ? seg.car.polyline : null)
+          return poly // may be null
+        }).filter(Boolean)
+        setPolylines(lines)
+      } catch (e) {
+        console.warn('Failed to fetch polylines', e)
+        setPolylines([])
+      }
+    }
+
+    fetchRoutes()
+    return () => { cancelled = true }
+  }, [itinerary])
 
   return (
     <div className="h-full w-full">
@@ -61,9 +93,10 @@ export default function MapView({ itinerary = [], initialCenter = [35.68, 139.76
           </Marker>
         ))}
 
-        {path.length > 1 && (
-          <Polyline positions={path} pathOptions={{ color: '#0078ff', weight: 4, opacity: 0.8 }} />
-        )}
+        {/* Render polylines between activities */}
+        {polylines.map((poly, i) => (
+          <Polyline key={`poly-${i}`} positions={poly} pathOptions={{ color: '#1e40af', weight: 4, opacity: 0.9 }} />
+        ))}
 
         {bounds.length > 0 && <FitBounds bounds={bounds} />}
       </MapContainer>

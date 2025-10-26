@@ -31,3 +31,18 @@ export async function fetchGeocode({ places = [], location = '', country = '' } 
   }
   return res.json() // expected: { "Place A": {lat, lng}, ... }
 }
+
+export async function fetchPolylines(payload){
+  // payload: { itinerary: [...]} or { pairs: [...] }
+  const res = await fetch('/api/route_polylines', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+  if (!res.ok) {
+    let body
+    try { body = await res.text() } catch (e) { body = '<unreadable response>' }
+    throw new Error(`Route API error ${res.status}: ${body}`)
+  }
+  return res.json()
+}
