@@ -17,7 +17,6 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 
 def create_app():
-    load_dotenv()
     app = Flask(__name__)
 
     # Store Gemini configuration in app.config so all routes can access it
@@ -28,7 +27,14 @@ def create_app():
     # --- Register Blueprints ---
     from .routes import bp
     from .itinerary_routes import itinerary_bp
-    CORS(app, resources={r"/*": {"origins": "*"}})
+
+    frontend_origin = os.environ.get("FRONTEND_URL")
+    if frontend_origin:
+        CORS(app, resources={r"/api/*": {"origins": frontend_origin}})
+    else:
+        # dev fallback: allow all (only in development)
+        CORS(app)
+
     app.register_blueprint(bp, url_prefix='/api')
     app.register_blueprint(itinerary_bp, url_prefix='/api')
     
