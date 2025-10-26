@@ -2,3 +2,5 @@ Flask>=2.0
 python-dotenv
 Flask-Cors
 gunicorn==20.1.0
+google-generative-ai>=0.4.0
+openrouteservice>=2.3.2
