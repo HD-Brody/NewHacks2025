@@ -1,31 +1,43 @@
 from flask import Flask
 from dotenv import load_dotenv
 import os
+import logging
+
+# Optional import for Google Generative AI (Gemini). If unavailable, LLM features
+# will be disabled but the rest of the app should still run.
 try:
     import google.generativeai as genai
 except Exception:
     genai = None
-    # optional: log a clear message so you know LLM features are disabled
-    import logging
     logging.getLogger(__name__).warning("google.generativeai not installed; LLM features disabled.")
 
 # --- Load environment variables ---
 load_dotenv()
 
-# --- Configure Gemini API ---
+# --- Configure Gemini API only if client is available and key present ---
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-if not GEMINI_API_KEY:
-    raise ValueError("GEMINI_API_KEY not found. Check your .env file.")
+# model can be overridden in env; default is kept
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
-genai.configure(api_key=GEMINI_API_KEY)
-GEMINI_MODEL = "gemini-2.5-flash"  # ✅ your verified working model
+if genai is not None:
+    if GEMINI_API_KEY:
+        try:
+            genai.configure(api_key=GEMINI_API_KEY)
+            logging.getLogger(__name__).info("Configured google.generativeai client.")
+        except Exception:
+            # If configuration fails, disable genai to avoid crashing the app.
+            logging.getLogger(__name__).exception("Failed to configure google.generativeai; disabling LLM features.")
+            genai = None
+    else:
+        logging.getLogger(__name__).warning("GEMINI_API_KEY not set; LLM features disabled.")
+
 from flask_cors import CORS
-from dotenv import load_dotenv
+
 
 def create_app():
     app = Flask(__name__)
 
-    # Store Gemini configuration in app.config so all routes can access it
+    # Store Gemini configuration in app.config so routes can detect availability
     app.config["GEMINI_API_KEY"] = GEMINI_API_KEY
     app.config["GEMINI_MODEL"] = GEMINI_MODEL
     app.config["GEMINI_CLIENT"] = genai
@@ -43,8 +55,9 @@ def create_app():
 
     app.register_blueprint(bp, url_prefix='/api')
     app.register_blueprint(itinerary_bp, url_prefix='/api')
-    
+
     @app.route('/')
     def home():
         return {'message': 'Flask backend is running'}
+
     return app
