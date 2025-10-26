@@ -6,44 +6,59 @@ from .time_optimizer import optimize_itinerary
 
 itinerary_bp = Blueprint('itinerary', __name__)
 
-
 @itinerary_bp.route('/generate_itinerary', methods=['POST'])
 def generate_itinerary_route():
     """
     POST /api/generate_itinerary
-    Expects JSON: { destination: str, month: str, preferences: [str] }
-
-    TODOs:
-    - validate input
-    - call a real AI itinerary generator or service
-    - call map service to get coordinates
-    - optimize route/order with time optimizer
-    - add caching, rate-limiting, auth as needed
+    Body JSON:
+    {
+        "destination": "Paris",
+        "month": "July",
+        "preferences": ["food", "museums"]
+    }
     """
+
     data = request.get_json(silent=True) or {}
+
     destination = data.get('destination')
     month = data.get('month')
     preferences = data.get('preferences', [])
 
-    # Basic input validation (expand as needed)
     if not destination:
         return jsonify({'error': 'destination is required'}), 400
+    if not month:
+        return jsonify({'error': 'month is required'}), 400
 
-    # Generate a basic itinerary (placeholder)
-    itinerary = generate_itinerary(destination, month, preferences)
+    # naive assumptions for now
+    budget = "$$"
+    category = preferences[0] if preferences else "general"
+    country = "FR"  # TODO: infer from destination or user input
+    city_name = destination
 
-    # Get mock coordinates for places
-    places = [item.get('place') for item in itinerary]
-    coords = get_location_coordinates(places)
+    # 1. Generate itinerary stops using Gemini
+    itinerary = generate_itinerary(destination, month, budget, category)
+    # itinerary is like:
+    # [
+    #   {"name": "place1", "time":[10.30,11.30], "category":"food","price":"$","description":"..."},
+    #   ...
+    # ]
 
-    # Attach coordinates to itinerary items when available
+    # 2. Extract place names
+    place_names = [item.get("name") for item in itinerary]
+
+    # 3. Geocode each place
+    coords_map = get_location_coordinates(place_names, city_name, country)
+    # coords_map is { "place1": {"lat":..., "lng":...}, ... }
+
+    # 4. Attach coordinates to each itinerary item
     for item in itinerary:
-        item['coordinates'] = coords.get(item.get('place'))
+        item["coordinates"] = coords_map.get(item["name"])
 
-    # Optionally run an optimizer (placeholder)
+    # 5. Optionally run optimizer (currently a no-op)
     optimized = optimize_itinerary(itinerary)
 
-    return jsonify({'destination': destination, 'month': month, 'itinerary': optimized})
-
-if __name__ == '__main__':
-    print(generate_itinerary_route)
+    return jsonify({
+        'destination': destination,
+        'month': month,
+        'itinerary': optimized
+    })

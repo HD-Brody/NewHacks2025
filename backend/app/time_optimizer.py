@@ -5,7 +5,7 @@ distance, opening hours, and user constraints.
 """
 
 def optimize_itinerary(itinerary):
-    """Placeholder optimizer that currently returns the itinerary unchanged.
+    """Inputs an itinerary and returns an optimized version by adjusting time values based on find_path_and_time.
 
     Args:
         itinerary (list[dict]): List of itinerary items
