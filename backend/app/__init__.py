@@ -1,7 +1,13 @@
 from flask import Flask
 from dotenv import load_dotenv
 import os
-import google.generativeai as genai
+try:
+    import google.generativeai as genai
+except Exception:
+    genai = None
+    # optional: log a clear message so you know LLM features are disabled
+    import logging
+    logging.getLogger(__name__).warning("google.generativeai not installed; LLM features disabled.")
 
 # --- Load environment variables ---
 load_dotenv()
