@@ -8,7 +8,6 @@ import requests
 import openrouteservice
 import time
 
-
 def nominatim_lookup(place, city=None):
     """Lookup a place with Nominatim (OpenStreetMap) as a lightweight fallback.
 
@@ -129,7 +128,7 @@ def get_location_coordinates(places, location, country):
             p = coords[place]
             try:
                 dist_km = haversine_km(city_lat, city_lon, float(p['lat']), float(p['lng']))
-                if dist_km > 50:
+                if dist_km > 200:
                     too_far = True
                     print(f"Warning: geocode for '{place}' is {dist_km:.1f}km from focus point; retrying with location context")
             except Exception:

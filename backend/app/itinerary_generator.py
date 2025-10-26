@@ -1,6 +1,7 @@
 import os
 import requests
 import json
+import re
 import google.generativeai as genai
 from dotenv import load_dotenv
 
@@ -14,10 +15,10 @@ def generate_itinerary(destination: str, month: str, budget: str, category: str)
     # Use single quotes for the internal keys to simplify the outer string escaping
     format_template = (
         '{"Places": {'
-        '"place1": { "time": [10.30, 11.30], "category": "food", "price": "$", "description": "short, clear description" }, '
-        '"place2": { "time": [11.30, 12.00], "category": "store", "price": "$", "description": "short, clear description" }, '
-        '"place3": { "time": [12.15, 13.00], "category": "museum", "price": "$", "description": "short, clear description" }, '
-        '"place4": { "time": [13.15, 14.00], "category": "outdoor", "price": "$", "description": "short, clear description" } } }'
+        '"place1": { "time": [10:30, 11:30], "category": "food", "price": "$", "description": "short, clear description" }, '
+        '"place2": { "time": [11:30, 12:00], "category": "store", "price": "$", "description": "short, clear description" }, '
+        '"place3": { "time": [12:15, 13:00], "category": "museum", "price": "$", "description": "short, clear description" }, '
+        '"place4": { "time": [13:15, 14:00], "category": "outdoor", "price": "$", "description": "short, clear description" } } }'
     )
 
     prompt = (
@@ -60,23 +61,40 @@ def generate_itinerary(destination: str, month: str, budget: str, category: str)
         response = model.generate_content(prompt)
         itinerary_text = (getattr(response, "text", "") or str(response)).strip()
 
+        # Try direct JSON parse first, then attempt to clean common wrappers
+        full_itinerary_dict = None
         try:
             full_itinerary_dict = json.loads(itinerary_text)
-
-            # Convert the dictionary to a list to match the return type hint
-            places_dict = full_itinerary_dict.get("Places", {})
-            itinerary_list = []
-            for name, details in places_dict.items():
-                place_data = {"name": name}
-                place_data.update(details)
-                itinerary_list.append(place_data)
-
-            return itinerary_list
-
         except json.JSONDecodeError:
+            # Common model outputs include markdown fences or extra text. Try to
+            # extract the first JSON object found in the string.
+            cleaned = itinerary_text
+            # remove Markdown code fences (```json ... ```)
+            cleaned = re.sub(r"```(?:json)?\s*", "", cleaned, flags=re.IGNORECASE)
+            cleaned = re.sub(r"\s*```\s*$", "", cleaned)
+            # Try to find the first {...} JSON object in the text
+            m = re.search(r"(\{.*\})", cleaned, flags=re.DOTALL)
+            if m:
+                candidate = m.group(1)
+                try:
+                    full_itinerary_dict = json.loads(candidate)
+                except json.JSONDecodeError:
+                    full_itinerary_dict = None
+
+        if not full_itinerary_dict:
             print("Could not parse model output as JSON:")
             print(itinerary_text)
             return []
+
+        # Convert the dictionary to a list to match the return type hint
+        places_dict = full_itinerary_dict.get("Places", {})
+        itinerary_list = []
+        for name, details in places_dict.items():
+            place_data = {"name": name}
+            place_data.update(details)
+            itinerary_list.append(place_data)
+
+        return itinerary_list
 
     except Exception as e:
         print("Error calling Gemini API:", e)
