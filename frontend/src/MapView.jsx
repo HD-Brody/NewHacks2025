@@ -1,5 +1,5 @@
 import React, { useMemo, useEffect } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
@@ -36,6 +36,7 @@ export default function MapView({ itinerary = [], initialCenter = [35.68, 139.76
 
   const bounds = points.map(p => [p.lat, p.lng])
   const center = points.length ? [points[0].lat, points[0].lng] : initialCenter
+  const path = points.length > 1 ? points.map(p => [p.lat, p.lng]) : []
 
   return (
     <div className="h-full w-full">
@@ -59,6 +60,10 @@ export default function MapView({ itinerary = [], initialCenter = [35.68, 139.76
             </Popup>
           </Marker>
         ))}
+
+        {path.length > 1 && (
+          <Polyline positions={path} pathOptions={{ color: '#0078ff', weight: 4, opacity: 0.8 }} />
+        )}
 
         {bounds.length > 0 && <FitBounds bounds={bounds} />}
       </MapContainer>
