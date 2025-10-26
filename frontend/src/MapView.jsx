@@ -24,10 +24,13 @@ export default function MapView({ itinerary = [], initialCenter = [35.68, 139.76
   // itinerary expected to be an array of items with { title, coordinates: { lat, lng } }
   const points = useMemo(() => (
     (itinerary || [])
-      .map(i => i && i.coordinates && i.coordinates.lat != null && i.coordinates.lng != null
-        ? { title: i.title || i.place || 'Untitled', lat: i.coordinates.lat, lng: i.coordinates.lng, description: i.description }
-        : null
-      )
+      .map(i => {
+        if (!i || !i.coordinates || i.coordinates.lat == null || i.coordinates.lng == null) return null
+        // Title may be under several keys depending on generator output
+        const title = i.title || i.place || i.name || 'Untitled'
+        const description = i.description || i.notes || i.summary || ''
+        return { title, lat: Number(i.coordinates.lat), lng: Number(i.coordinates.lng), description }
+      })
       .filter(Boolean)
   ), [itinerary])
 
