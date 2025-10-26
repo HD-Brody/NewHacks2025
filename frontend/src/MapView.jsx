@@ -20,17 +20,19 @@ function FitBounds({ bounds }) {
   return null
 }
 
-export default function MapView({ itinerary, initialCenter = [41.886954, 12.501652], initialZoom = 13 }) {
-  // itinerary expected to be an array of items with { place, coordinates: { lat, lng } }
-  const points = (itinerary || []).map(i => ({ place: i.place, coords: i.coordinates }))
+export default function MapView({ itinerary = [], initialCenter = [35.68, 139.76], initialZoom = 13 }) {
+  // itinerary expected to be an array of items with { title, coordinates: { lat, lng } }
+  const points = useMemo(() => (
+    (itinerary || [])
+      .map(i => i && i.coordinates && i.coordinates.lat != null && i.coordinates.lng != null
+        ? { title: i.title || i.place || 'Untitled', lat: i.coordinates.lat, lng: i.coordinates.lng, description: i.description }
+        : null
+      )
+      .filter(Boolean)
+  ), [itinerary])
 
-  const hasCoords = points.some(p => p.coords && p.coords.lat != null && p.coords.lng != null)
-
-  const bounds = points
-    .filter(p => p.coords && p.coords.lat != null && p.coords.lng != null)
-    .map(p => [p.coords.lat, p.coords.lng])
-
-  const center = useMemo(() => (bounds && bounds.length ? bounds[0] : initialCenter), [bounds, initialCenter])
+  const bounds = points.map(p => [p.lat, p.lng])
+  const center = points.length ? [points[0].lat, points[0].lng] : initialCenter
 
   return (
     <div className="h-full w-full">
@@ -46,17 +48,16 @@ export default function MapView({ itinerary, initialCenter = [41.886954, 12.5016
         />
 
         {points.map((p, idx) => (
-          p.coords && (
-            <Marker key={idx} position={[p.coords.lat, p.coords.lng]}>
-              <Popup>
-                <div className="font-semibold">{p.place}</div>
-                <div className="text-xs">{p.coords.lat}, {p.coords.lng}</div>
-              </Popup>
-            </Marker>
-          )
+          <Marker key={p.title || idx} position={[p.lat, p.lng]}>
+            <Popup>
+              <div className="font-semibold">{p.title}</div>
+              {p.description && <div className="text-sm mt-1">{p.description}</div>}
+              <div className="text-xs text-gray-500 mt-1">{p.lat.toFixed(5)}, {p.lng.toFixed(5)}</div>
+            </Popup>
+          </Marker>
         ))}
 
-        <FitBounds bounds={bounds} />
+        {bounds.length > 0 && <FitBounds bounds={bounds} />}
       </MapContainer>
     </div>
   )

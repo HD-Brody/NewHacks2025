@@ -30,43 +30,63 @@ def get_location_coordinates(places, location, country):
     api_key = os.getenv("ORS_API_KEY")
 
     coords = {}
-    
-    # Simple deterministic mock: hash the place name to a pseudo-lat/lng
+
+    # If there's no API key available, return None for every place (dev-friendly)
+    if not api_key:
+        for place in (places or []):
+            coords[place] = None
+        return coords
+
+    # Use the OpenRouteService geocode endpoint to find coordinates.
+    # Be defensive: external APIs may return empty 'features' and we must not
+    # raise unhandled exceptions in the server. For any place we can't resolve,
+    # set its value to None so the frontend can handle missing coordinates.
+    url = "https://api.openrouteservice.org/geocode/search"
+
     for i, place in enumerate(places or []):
+        city_lon = city_lat = None
 
-        url = "https://api.openrouteservice.org/geocode/search"
+        # Try to get a focus point for the requested location (helps geo accuracy)
+        if location:
+            try:
+                params_loc = {"api_key": api_key, "text": location}
+                resp = requests.get(url, params=params_loc, timeout=10)
+                resp.raise_for_status()
+                data = resp.json() or {}
+                features = data.get('features') or []
+                if features:
+                    coords_list = features[0].get('geometry', {}).get('coordinates') or []
+                    if len(coords_list) >= 2:
+                        city_lon, city_lat = coords_list[0], coords_list[1]
+            except Exception as e:
+                # Log and continue — don't fail the whole function
+                print(f"Warning: failed to fetch focus point for location '{location}': {e}")
 
-        # determine the focus point depending on index in the list
-        if (i == 0):
-            params = {
-                "api_key": api_key,
-                "text": location,
-            }
+        # Now geocode the place itself
+        try:
+            params_place = {"api_key": api_key, "text": place}
+            if country:
+                params_place["boundary.country"] = country
+            if city_lat is not None and city_lon is not None:
+                params_place["focus.point.lat"] = city_lat
+                params_place["focus.point.lon"] = city_lon
 
-        response = requests.get(url, params=params)
-        response.raise_for_status()  # Raise if status code != 200
-            
-        data = response.json()
-        if data['features']:
-            city_lon, city_lat = data['features'][0]['geometry']['coordinates']  
-
-        # get the coordinates using the API
-        params = {
-            "api_key": api_key,
-            "text": place,
-            "boundary.country": country,
-            "focus.point.lat": city_lat,
-            "focus.point.lon": city_lon
-        }
-
-        response = requests.get(url, params=params)
-        response.raise_for_status()  # Raise if status code != 200
-            
-        data = response.json()
-        if data['features']:
-            place_lon, place_lat = data['features'][0]['geometry']['coordinates']
-        
-        coords[place] = {'lat': place_lon, 'lng': place_lat}
+            resp = requests.get(url, params=params_place, timeout=10)
+            resp.raise_for_status()
+            data = resp.json() or {}
+            features = data.get('features') or []
+            if features:
+                coords_list = features[0].get('geometry', {}).get('coordinates') or []
+                if len(coords_list) >= 2:
+                    place_lon, place_lat = coords_list[0], coords_list[1]
+                    coords[place] = {'lat': place_lat, 'lng': place_lon}
+                else:
+                    coords[place] = None
+            else:
+                coords[place] = None
+        except Exception as e:
+            print(f"Warning: failed to geocode place '{place}': {e}")
+            coords[place] = None
 
     return coords
 
