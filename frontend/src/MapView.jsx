@@ -30,25 +30,28 @@ export default function MapView({ itinerary = [], initialCenter = [35.68, 139.76
         // Title may be under several keys depending on generator output
         const title = i.title || i.place || i.name || 'Untitled'
         const description = i.description || i.notes || i.summary || ''
-        return { title, lat: Number(i.coordinates.lat), lng: Number(i.coordinates.lng), description }
+        const isPlaceholder = i.coordinates && i.coordinates._placeholder
+        return { title, lat: Number(i.coordinates.lat), lng: Number(i.coordinates.lng), description, _placeholder: isPlaceholder }
       })
       .filter(Boolean)
   ), [itinerary])
 
   const bounds = points.map(p => [p.lat, p.lng])
-  const center = points.length ? [points[0].lat, points[0].lng] : initialCenter
+  const center = (initialCenter && initialCenter.length) ? initialCenter : (points.length ? [points[0].lat, points[0].lng] : initialCenter)
   const [polylines, setPolylines] = useState([])
 
   // Fetch polylines for consecutive itinerary points
   useEffect(() => {
     let cancelled = false
-    // build simple itinerary payload with coordinates only
-    const payloadItin = (itinerary || []).map(item => ({ coordinates: item && item.coordinates ? { lat: Number(item.coordinates.lat), lng: Number(item.coordinates.lng) } : null }))
-    const validCount = payloadItin.filter(i => i && i.coordinates && i.coordinates.lat != null && i.coordinates.lng != null).length
-    if (validCount < 2) {
+    // Only fetch polylines once we have real (non-placeholder) coordinates for all itinerary items
+    const allReal = (itinerary || []).length >= 2 && (itinerary || []).every(item => item && item.coordinates && !item.coordinates._placeholder)
+    if (!allReal) {
       setPolylines([])
       return
     }
+
+    // build simple itinerary payload with coordinates only
+    const payloadItin = (itinerary || []).map(item => ({ coordinates: item && item.coordinates ? { lat: Number(item.coordinates.lat), lng: Number(item.coordinates.lng) } : null }))
 
     const fetchRoutes = async () => {
       try {
@@ -86,7 +89,7 @@ export default function MapView({ itinerary = [], initialCenter = [35.68, 139.76
         {points.map((p, idx) => (
           <Marker key={p.title || idx} position={[p.lat, p.lng]}>
             <Popup>
-              <div className="font-semibold">{p.title}</div>
+              <div className="font-semibold">{p.title}{p._placeholder ? ' (approx)' : ''}</div>
               {p.description && <div className="text-sm mt-1">{p.description}</div>}
               <div className="text-xs text-gray-500 mt-1">{p.lat.toFixed(5)}, {p.lng.toFixed(5)}</div>
             </Popup>

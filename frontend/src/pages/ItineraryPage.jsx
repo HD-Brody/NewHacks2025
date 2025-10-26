@@ -18,6 +18,26 @@ export default function ItineraryPage({ formData = {}, itinerary = [], onBack, s
     // Fetch geocode data when the component mounts
     const fetchGeocodeData = async () => {
       try {
+        // first, resolve destination coordinates so we can render placeholders immediately
+        if (formData.location && !destCoords) {
+          try {
+            const destMap = await fetchGeocode({ places: [formData.location], location: formData.location, country: formData.country })
+            const firstKey = Object.keys(destMap || {})[0]
+            const destFound = firstKey ? destMap[firstKey] : null
+            if (destFound && destFound.lat != null && destFound.lng != null) {
+              const dc = { lat: Number(destFound.lat), lng: Number(destFound.lng) }
+              setDestCoords(dc)
+              // set placeholder coords immediately so the map shows markers without waiting for full geocode
+              setItinerary(prev => (prev || []).map(item => {
+                if (item && item.coordinates) return item
+                return { ...item, coordinates: { lat: dc.lat, lng: dc.lng, _placeholder: true } }
+              }))
+            }
+          } catch (e) {
+            console.warn('Failed to geocode destination (initial):', e)
+          }
+        }
+
         // append destination to each query (helps disambiguate common names)
         const places = itinerary.map(item => {
           const base = item.title || item.place
@@ -29,16 +49,16 @@ export default function ItineraryPage({ formData = {}, itinerary = [], onBack, s
         console.log('ItineraryPage: coordsMap', coordsMap)
 
         // also fetch coordinates for the destination itself so the map can center on it
-        if (formData.location) {
+        if (formData.location && !destCoords) {
           try {
-            const destMap = await fetchGeocode({ places: [formData.location], location: formData.location, country: formData.country })
-            const destKey = normalize(formData.location)
-            const destFound = (destMap && (destMap[formData.location] || destMap[formData.location + `, ${formData.location}`])) || destMap[Object.keys(destMap || {})[0]]
-            if (destFound && destFound.lat != null && destFound.lng != null) {
-              setDestCoords({ lat: Number(destFound.lat), lng: Number(destFound.lng) })
+            const destMap2 = await fetchGeocode({ places: [formData.location], location: formData.location, country: formData.country })
+            const firstKey2 = Object.keys(destMap2 || {})[0]
+            const destFound2 = firstKey2 ? destMap2[firstKey2] : null
+            if (destFound2 && destFound2.lat != null && destFound2.lng != null) {
+              setDestCoords({ lat: Number(destFound2.lat), lng: Number(destFound2.lng) })
             }
           } catch (e) {
-            console.warn('Failed to geocode destination:', e)
+            console.warn('Failed to geocode destination (secondary):', e)
           }
         }
 
@@ -55,7 +75,11 @@ export default function ItineraryPage({ formData = {}, itinerary = [], onBack, s
           const found = coordsMapNormalized[keyWithLoc] || coordsMapNormalized[key]
           const coords = found && found.lat != null && found.lng != null
             ? { lat: Number(found.lat), lng: Number(found.lng) }
-            : item.coordinates || null
+            : (item.coordinates && item.coordinates._placeholder ? item.coordinates : item.coordinates || null)
+          // if we replaced a placeholder with a real coord, remove the _placeholder flag
+          if (coords && coords._placeholder) {
+            // keep as-is until replaced by a real geocode
+          }
           return { ...item, coordinates: coords }
         }))
       } catch (error) {

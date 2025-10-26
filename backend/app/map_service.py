@@ -11,6 +11,9 @@ except Exception:
     openrouteservice = None
     print('Warning: optional dependency "openrouteservice" not installed; route decoding will be limited.')
 import time
+import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 
 def nominatim_lookup(place, city=None):
     """Lookup a place with Nominatim (OpenStreetMap) as a lightweight fallback.
@@ -57,26 +60,57 @@ def get_location_coordinates(places, location, country):
 
     coords = {}
 
-    # If there's no API key available, return None for every place (dev-friendly)
-    if not api_key:
-        for place in (places or []):
-            coords[place] = None
-        return coords
+    def haversine_km(lat1, lon1, lat2, lon2):
+        from math import radians, sin, cos, sqrt, atan2
+        R = 6371.0
+        dlat = radians(lat2 - lat1)
+        dlon = radians(lon2 - lon1)
+        a = sin(dlat/2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon/2)**2
+        c = 2 * atan2(sqrt(a), sqrt(1-a))
+        return R * c
 
-    # Use the OpenRouteService geocode endpoint to find coordinates.
-    # Be defensive: external APIs may return empty 'features' and we must not
-    # raise unhandled exceptions in the server. For any place we can't resolve,
-    # set its value to None so the frontend can handle missing coordinates.
+    # load or initialize on-disk cache
+    try:
+        cache_file = Path(base_dir) / 'geocode_cache.json'
+        if cache_file.exists():
+            with open(cache_file, 'r', encoding='utf-8') as fh:
+                cache = json.load(fh)
+        else:
+            cache = {}
+    except Exception:
+        cache = {}
+
+    # helper to persist cache (best-effort)
+    def _save_cache():
+        try:
+            with open(Path(base_dir) / 'geocode_cache.json', 'w', encoding='utf-8') as fh:
+                json.dump(cache, fh)
+        except Exception:
+            pass
+
+    # If there's no API key available, we'll still try Nominatim in parallel
     url = "https://api.openrouteservice.org/geocode/search"
 
-    for i, place in enumerate(places or []):
-        city_lon = city_lat = None
+    # gather list of places to resolve
+    places_list = list(places or [])
+    # preload cache hits
+    for place in places_list:
+        if place in cache:
+            coords[place] = cache.get(place)
+        else:
+            coords[place] = None
 
-        # Try to get a focus point for the requested location (helps geo accuracy)
+    # quick helper for a single place resolution (uses ORS -> retry -> nominatim)
+    def _resolve_place(place):
+        # if cache hit, return immediately
+        if place in cache and cache.get(place) is not None:
+            return place, cache.get(place)
+
+        city_lon = city_lat = None
         if location:
             try:
-                params_loc = {"api_key": api_key, "text": location}
-                resp = requests.get(url, params=params_loc, timeout=10)
+                params_loc = {"api_key": api_key, "text": location} if api_key else {"text": location}
+                resp = requests.get(url, params=params_loc, timeout=8)
                 resp.raise_for_status()
                 data = resp.json() or {}
                 features = data.get('features') or []
@@ -84,26 +118,25 @@ def get_location_coordinates(places, location, country):
                     coords_list = features[0].get('geometry', {}).get('coordinates') or []
                     if len(coords_list) >= 2:
                         city_lon, city_lat = coords_list[0], coords_list[1]
-            except Exception as e:
-                # Log and continue — don't fail the whole function
-                print(f"Warning: failed to fetch focus point for location '{location}': {e}")
+            except Exception:
+                city_lon = city_lat = None
 
-        # Now geocode the place itself
-        try:
-            # include the location in the query text to bias results to the destination
-            params_place = {"api_key": api_key, "text": f"{place}, {location}" if location else place}
-            if country:
-                params_place["boundary.country"] = country
-            if city_lat is not None and city_lon is not None:
-                params_place["focus.point.lat"] = city_lat
-                params_place["focus.point.lon"] = city_lon
-
-            resp = requests.get(url, params=params_place, timeout=10)
-            resp.raise_for_status()
-            data = resp.json() or {}
-            features = data.get('features') or []
-            if features:
-                # If we have a city focus, pick the feature closest to the city center.
+        # define a small inner lookup to call ORS and pick closest feature
+        def _call_ors(query_text):
+            try:
+                params = {"api_key": api_key, "text": query_text} if api_key else {"text": query_text}
+                if country:
+                    params["boundary.country"] = country
+                if city_lat is not None and city_lon is not None:
+                    params["focus.point.lat"] = city_lat
+                    params["focus.point.lon"] = city_lon
+                resp = requests.get(url, params=params, timeout=8)
+                resp.raise_for_status()
+                data = resp.json() or {}
+                features = data.get('features') or []
+                if not features:
+                    return None
+                # pick closest to city focus if available
                 if city_lat is not None and city_lon is not None:
                     best = None
                     best_dist = None
@@ -121,117 +154,53 @@ def get_location_coordinates(places, location, country):
                             best_dist = dist_km
                     if best is not None:
                         place_lon, place_lat = best[0], best[1]
-                        coords[place] = {'lat': place_lat, 'lng': place_lon}
-                    else:
-                        coords[place] = None
-                else:
-                    coords_list = features[0].get('geometry', {}).get('coordinates') or []
-                    if len(coords_list) >= 2:
-                        place_lon, place_lat = coords_list[0], coords_list[1]
-                        coords[place] = {'lat': place_lat, 'lng': place_lon}
-                    else:
-                        coords[place] = None
-            else:
-                coords[place] = None
-        except Exception as e:
-            print(f"Warning: failed to geocode place '{place}': {e}")
-            coords[place] = None
-
-        # If ORS returned coordinates, but we had a focus point, ensure the result
-        # is reasonably close to the focus (destination). Otherwise, try a
-        # re-query with the location appended, and finally fall back to Nominatim.
-        def haversine_km(lat1, lon1, lat2, lon2):
-            from math import radians, sin, cos, sqrt, atan2
-            R = 6371.0
-            dlat = radians(lat2 - lat1)
-            dlon = radians(lon2 - lon1)
-            a = sin(dlat/2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon/2)**2
-            c = 2 * atan2(sqrt(a), sqrt(1-a))
-            return R * c
-
-        too_far = False
-        if coords.get(place) and (city_lat is not None and city_lon is not None):
-            # Compute distance between city center and discovered place
-            p = coords[place]
-            try:
-                dist_km = haversine_km(city_lat, city_lon, float(p['lat']), float(p['lng']))
-                if dist_km > 200:
-                    too_far = True
-                    print(f"Warning: geocode for '{place}' is {dist_km:.1f}km from focus point; retrying with location context")
+                        # if best is too far, treat as no result
+                        if best_dist is not None and best_dist > 200:
+                            return None
+                        return {'lat': place_lat, 'lng': place_lon}
+                # fallback to first feature
+                coords_list = features[0].get('geometry', {}).get('coordinates') or []
+                if len(coords_list) >= 2:
+                    place_lon, place_lat = coords_list[0], coords_list[1]
+                    return {'lat': place_lat, 'lng': place_lon}
             except Exception:
-                pass
+                return None
 
-        if too_far:
-            # retry ORS with appended location text
-            try:
-                # also include location in retry text (if not already present)
-                params_retry = {"api_key": api_key, "text": f"{place}, {location}" if location else place}
-                if country:
-                    params_retry["boundary.country"] = country
-                if city_lat is not None and city_lon is not None:
-                    params_retry["focus.point.lat"] = city_lat
-                    params_retry["focus.point.lon"] = city_lon
-                resp = requests.get(url, params=params_retry, timeout=10)
-                resp.raise_for_status()
-                data = resp.json() or {}
-                features = data.get('features') or []
-                if features:
-                    # pick the feature closest to the city focus if available
-                    if city_lat is not None and city_lon is not None:
-                        best = None
-                        best_dist = None
-                        for f in features:
-                            coords_list = f.get('geometry', {}).get('coordinates') or []
-                            if len(coords_list) < 2:
-                                continue
-                            lon, lat = coords_list[0], coords_list[1]
-                            try:
-                                dist_km = haversine_km(city_lat, city_lon, float(lat), float(lon))
-                            except Exception:
-                                dist_km = None
-                            if best is None or (dist_km is not None and (best_dist is None or dist_km < best_dist)):
-                                best = (lon, lat)
-                                best_dist = dist_km
-                        if best is not None:
-                            place_lon, place_lat = best[0], best[1]
-                            coords[place] = {'lat': place_lat, 'lng': place_lon}
-                            try:
-                                if best_dist is not None and best_dist > 200:
-                                    coords[place] = None
-                            except Exception:
-                                pass
-                        else:
-                            coords[place] = None
-                    else:
-                        coords_list = features[0].get('geometry', {}).get('coordinates') or []
-                        if len(coords_list) >= 2:
-                            place_lon, place_lat = coords_list[0], coords_list[1]
-                            coords[place] = {'lat': place_lat, 'lng': place_lon}
-                        else:
-                            coords[place] = None
-                else:
-                    coords[place] = None
-            except Exception as e:
-                print(f"Warning: retry ORS failed for '{place}': {e}")
-
-        # If ORS didn't return a coordinate (or result was too far), fall back to Nominatim
-        if coords.get(place) is None:
+        # try ORS with appended location (if available)
+        q = f"{place}, {location}" if location else place
+        res = None
+        if api_key:
+            res = _call_ors(q)
+        # if ORS not available or returned None, try nominatim
+        if res is None:
             try:
                 nomi = nominatim_lookup(place, location)
                 if nomi:
-                    # if a city focus exists, ensure Nominatim result is not far away
-                    if city_lat is not None and city_lon is not None:
-                        try:
-                            dist_km = haversine_km(city_lat, city_lon, float(nomi['lat']), float(nomi['lng']))
-                            if dist_km <= 200:
-                                coords[place] = nomi
-                        except Exception:
-                            coords[place] = nomi
-                    else:
-                        coords[place] = nomi
-                    time.sleep(1)
-            except Exception as e:
-                print(f"Warning: nominatim fallback failed for '{place}': {e}")
+                    res = nomi
+            except Exception:
+                res = None
+
+        # save to cache for future
+        try:
+            cache[place] = res
+        except Exception:
+            pass
+        return place, res
+
+    # run resolves in parallel for missing places
+    to_resolve = [p for p in places_list if coords.get(p) is None]
+    if to_resolve:
+        with ThreadPoolExecutor(max_workers=min(8, max(2, len(to_resolve)))) as ex:
+            futures = {ex.submit(_resolve_place, p): p for p in to_resolve}
+            for fut in as_completed(futures):
+                try:
+                    p, r = fut.result()
+                    coords[p] = r
+                except Exception:
+                    coords[futures[fut]] = None
+
+        # persist cache (best-effort)
+        _save_cache()
 
     return coords
 
