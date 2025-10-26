@@ -21,12 +21,21 @@ def generate_itinerary(destination: str, month: str, budget: str, category: str)
     )
 
     prompt = (
-        f"You must only respond with a JSON object that gives a daily itinerary for a trip to {destination} "
-        f"based around a given {category} activity with a **{budget}** price point, formatted exactly as follows: {format_template}. "
-        f"Each place in the itinerary must be open and accessible in {month}. "
-        f"Each price must be $, $$, or $$$. Every place must be open at the specified time. "
-        f"Structure the itinerary around the given activity. All descriptions must be short, clear, and to the point. "
-        f"Output only JSON, nothing else."
+        f"""
+        You must only respond with a JSON object that gives a daily itinerary for a trip to {destination},
+        based around a given {category} activity with a **{budget}** price point, formatted exactly as follows: {format_template}.
+
+        Each "place" in the itinerary must meet ALL of the following conditions:
+        - It must refer to the exact and official name of a real, mappable location or business (such as those findable on Google Maps or OpenStreetMap).
+        - It must be open and accessible in {month}.
+        - It must be within a reasonable travel distance for a single day trip.
+        - Prices must be $, $$, or $$$.
+        - Every listed time must be formatted as a string in "HH:MM" format (e.g., "10:15").
+        - Descriptions must be short, clear, and to the point.
+        - Output only JSON — no text outside the JSON object.
+
+        If there are multiple branches or similar names, always use the main or most well-known location name (for example, "Tokyo Sushi Academy" instead of "Tokyo Sushi Academy Tsukiji").
+        """
     )
 
     # Use only Content-Type header; pass API key as query parameter if available

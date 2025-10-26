@@ -5,6 +5,29 @@ Provides function to convert place names into latitude/longitude pairs.
 import os
 from dotenv import load_dotenv
 import requests
+import time
+
+
+def nominatim_lookup(place, city=None):
+    """Lookup a place with Nominatim (OpenStreetMap) as a lightweight fallback.
+
+    Returns: {'lat': float, 'lng': float} or None
+    """
+    try:
+        q = f"{place} {city or ''}".strip()
+        url = "https://nominatim.openstreetmap.org/search"
+        headers = {"User-Agent": "NewHacksDev/1.0 (dev@example.com)"}
+        params = {"q": q, "format": "json", "limit": 1}
+        resp = requests.get(url, params=params, headers=headers, timeout=10)
+        resp.raise_for_status()
+        data = resp.json() or []
+        if not data:
+            return None
+        first = data[0]
+        return {"lat": float(first.get('lat')), "lng": float(first.get('lon'))}
+    except Exception as e:
+        print(f"Nominatim lookup failed for '{place}': {e}")
+        return None
 
 def get_location_coordinates(places, location, country):
     """Return real coordinates for a list of place names.
@@ -87,6 +110,80 @@ def get_location_coordinates(places, location, country):
         except Exception as e:
             print(f"Warning: failed to geocode place '{place}': {e}")
             coords[place] = None
+
+        # If ORS returned coordinates, but we had a focus point, ensure the result
+        # is reasonably close to the focus (destination). Otherwise, try a
+        # re-query with the location appended, and finally fall back to Nominatim.
+        def haversine_km(lat1, lon1, lat2, lon2):
+            from math import radians, sin, cos, sqrt, atan2
+            R = 6371.0
+            dlat = radians(lat2 - lat1)
+            dlon = radians(lon2 - lon1)
+            a = sin(dlat/2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon/2)**2
+            c = 2 * atan2(sqrt(a), sqrt(1-a))
+            return R * c
+
+        too_far = False
+        if coords.get(place) and (city_lat is not None and city_lon is not None):
+            # Compute distance between city center and discovered place
+            p = coords[place]
+            try:
+                dist_km = haversine_km(city_lat, city_lon, float(p['lat']), float(p['lng']))
+                if dist_km > 50:
+                    too_far = True
+                    print(f"Warning: geocode for '{place}' is {dist_km:.1f}km from focus point; retrying with location context")
+            except Exception:
+                pass
+
+        if too_far:
+            # retry ORS with appended location text
+            try:
+                params_retry = {"api_key": api_key, "text": f"{place}, {location}"}
+                if country:
+                    params_retry["boundary.country"] = country
+                if city_lat is not None and city_lon is not None:
+                    params_retry["focus.point.lat"] = city_lat
+                    params_retry["focus.point.lon"] = city_lon
+                resp = requests.get(url, params=params_retry, timeout=10)
+                resp.raise_for_status()
+                data = resp.json() or {}
+                features = data.get('features') or []
+                if features:
+                    coords_list = features[0].get('geometry', {}).get('coordinates') or []
+                    if len(coords_list) >= 2:
+                        place_lon, place_lat = coords_list[0], coords_list[1]
+                        coords[place] = {'lat': place_lat, 'lng': place_lon}
+                        # re-check distance
+                        try:
+                            dist_km = haversine_km(city_lat, city_lon, float(place_lat), float(place_lon))
+                            if dist_km > 200:
+                                # still far — treat as no result
+                                coords[place] = None
+                        except Exception:
+                            pass
+                else:
+                    coords[place] = None
+            except Exception as e:
+                print(f"Warning: retry ORS failed for '{place}': {e}")
+
+        # If ORS didn't return a coordinate (or result was too far), fall back to Nominatim
+        if coords.get(place) is None:
+            try:
+                nomi = nominatim_lookup(place, location)
+                if nomi:
+                    # if a city focus exists, ensure Nominatim result is not far away
+                    if city_lat is not None and city_lon is not None:
+                        try:
+                            dist_km = haversine_km(city_lat, city_lon, float(nomi['lat']), float(nomi['lng']))
+                            if dist_km <= 200:
+                                coords[place] = nomi
+                        except Exception:
+                            coords[place] = nomi
+                    else:
+                        coords[place] = nomi
+                    time.sleep(1)
+            except Exception as e:
+                print(f"Warning: nominatim fallback failed for '{place}': {e}")
 
     return coords
 

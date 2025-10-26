@@ -8,39 +8,45 @@ import ItineraryPage from './pages/ItineraryPage'
 export default function App(){
   // Hardcoded test itinerary (matches the user's provided object)
   const TEST_ITINERARY_OBJ = {
-    Places: {
-      "Meiji Jingu Shrine": {
-        "time": ["10:00", "11:30"],
-        "category": "outdoor",
-        "price": "$",
-        "description": "Explore a vast, serene forest shrine dedicated to Emperor Meiji."
-      },
-      "Wagyu Beef Yakiniku Lunch": {
-        "time": ["12:30", "14:00"],
-        "category": "food",
-        "price": "$$",
-        "description": "Savor a high-quality Wagyu beef set meal at a specialized yakiniku restaurant."
-      },
-      "Tokyo Metropolitan Government Building Observation Decks": {
-        "time": ["14:30", "15:30"],
-        "category": "outdoor",
-        "price": "$",
-        "description": "Enjoy free panoramic views of Tokyo from a skyscraper observation deck."
-      },
-      "Shinjuku Gyoen National Garden": {
-        "time": ["16:00", "17:30"],
-        "category": "outdoor",
-        "price": "$",
-        "description": "Stroll through a beautiful fusion of Japanese, English, and French landscape gardens."
-      },
-      "Omoide Yokocho (Memory Lane)": {
-        "time": ["18:30", "20:00"],
-        "category": "food",
-        "price": "$$",
-        "description": "Experience a retro alleyway with tiny izakayas offering grilled skewers and drinks."
-      }
+  "Places": {
+    "Colosseum": {
+      "time": ["09:00", "11:00"],
+      "category": "historical site",
+      "price": "$$",
+      "description": "Explore the iconic ancient Roman amphitheater, a symbol of Rome's grandeur and engineering."
+    },
+    "Roman Forum": {
+      "time": ["11:00", "12:30"],
+      "category": "historical site",
+      "price": "$$",
+      "description": "Wander through the ruins of ancient government buildings, temples, and basilicas next to the Colosseum."
+    },
+    "Trattoria Da Enzo al 29": {
+      "time": ["13:00", "14:30"],
+      "category": "food",
+      "price": "$$",
+      "description": "Enjoy authentic Roman cuisine and traditional dishes at a beloved trattoria in Trastevere."
+    },
+    "Santa Maria in Trastevere": {
+      "time": ["14:45", "15:45"],
+      "category": "church",
+      "price": "$",
+      "description": "Visit one of Rome's oldest churches, famous for its stunning mosaics and peaceful ambiance."
+    },
+    "Gelateria Otaleg": {
+      "time": ["16:00", "16:45"],
+      "category": "food",
+      "price": "$",
+      "description": "Indulge in artisanal, high-quality gelato with unique and classic flavors."
+    },
+    "Gianicolo Hill": {
+      "time": ["17:00", "18:00"],
+      "category": "outdoor",
+      "price": "$",
+      "description": "Enjoy panoramic views of Rome, offering a perfect spot for sunset over the city."
     }
   }
+}
 
   // Helper to turn numeric times like 10.00 or 11.3 into "HH:MM"
   const formatTime = (t) => {

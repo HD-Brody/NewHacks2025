@@ -4,7 +4,7 @@ from app.itinerary_generator import generate_itinerary
 
 def main():
     # Hardcoded test parameters
-    destination = "Japan"
+    destination = "Rome"
     month = "October"
     budget = "$$"
     category = "food"
